@@ -1,0 +1,556 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>O2O药品大数据分析平台</title>
+    <!-- 引入 ECharts -->
+    <script src="https://registry.npmmirror.com/echarts/5.5.0/files/dist/echarts.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Microsoft YaHei', sans-serif;
+        }
+
+        body {
+            display: flex;
+            height: 100vh;
+            background: #f4f7fb;
+        }
+
+        /* 左侧菜单 */
+        .sidebar {
+            width: 220px;
+            background: #1a3c5e;
+            color: white;
+            padding: 20px 0;
+            display: flex;
+            flex-direction: column;
+            flex-shrink: 0;
+        }
+
+        .sidebar .logo {
+            font-size: 20px;
+            font-weight: bold;
+            padding: 0 20px 30px 20px;
+            border-bottom: 1px solid #2a4c6e;
+            margin-bottom: 20px;
+            letter-spacing: 2px;
+        }
+        .sidebar .logo span {
+            color: #7fc8f8;
+        }
+
+        .sidebar .menu-item {
+            padding: 14px 20px;
+            cursor: pointer;
+            transition: 0.2s;
+            border-left: 4px solid transparent;
+            font-size: 15px;
+        }
+
+        .sidebar .menu-item:hover {
+            background: #2a4c6e;
+        }
+
+        .sidebar .menu-item.active {
+            background: #2a4c6e;
+            border-left-color: #7fc8f8;
+            font-weight: bold;
+        }
+
+        /* 右侧主区域 */
+        .main {
+            flex: 1;
+            padding: 25px 30px;
+            overflow-y: auto;
+        }
+
+        .page {
+            display: none;
+            animation: fadeIn 0.3s;
+        }
+
+        .page.active {
+            display: block;
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0.6;
+                transform: translateY(8px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        /* 卡片通用 */
+        .card-row {
+            display: flex;
+            gap: 20px;
+            margin-bottom: 25px;
+            flex-wrap: wrap;
+        }
+
+        .card-box {
+            background: white;
+            padding: 20px 25px;
+            border-radius: 12px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.04);
+            flex: 1;
+            min-width: 150px;
+            border-left: 5px solid #3b8fc2;
+        }
+
+        .card-box .num {
+            font-size: 32px;
+            font-weight: bold;
+            color: #1a3c5e;
+            margin-top: 6px;
+        }
+
+        .card-box .label {
+            color: #7a8b9f;
+            font-size: 14px;
+        }
+
+        .card-box.green {
+            border-left-color: #4caf84;
+        }
+        .card-box.orange {
+            border-left-color: #f5a623;
+        }
+        .card-box.purple {
+            border-left-color: #a389d4;
+        }
+
+        .chart-container {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 25px;
+            margin-top: 10px;
+        }
+
+        .chart-box {
+            background: white;
+            padding: 20px;
+            border-radius: 12px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.04);
+            flex: 1;
+            min-width: 300px;
+        }
+
+        .chart-box h4 {
+            color: #333;
+            margin-bottom: 15px;
+            font-size: 16px;
+        }
+
+        .chart-wrap {
+            width: 100%;
+            height: 350px;
+        }
+        .chart-wrap.tall {
+            height: 300px;
+        }
+        .chart-wrap.short {
+            height: 200px;
+        }
+
+        .desc-text {
+            background: white;
+            padding: 15px 20px;
+            border-radius: 12px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.04);
+            margin-top: 15px;
+            line-height: 1.8;
+            color: #444;
+        }
+        .desc-text strong {
+            color: #1a3c5e;
+        }
+
+        .filter-bar {
+            background: white;
+            padding: 15px 20px;
+            border-radius: 12px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.04);
+            margin-bottom: 20px;
+            display: flex;
+            gap: 15px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+        .filter-bar select,
+        .filter-bar input,
+        .filter-bar button {
+            padding: 8px 16px;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            font-size: 14px;
+        }
+
+        .filter-bar button {
+            background: #1a3c5e;
+            color: white;
+            border: none;
+            cursor: pointer;
+        }
+
+        .rec-list {
+            background: white;
+            padding: 20px;
+            border-radius: 12px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.04);
+        }
+        .rec-list li {
+            list-style: none;
+            padding: 12px 0;
+            border-bottom: 1px solid #f0f0f0;
+            display: flex;
+            justify-content: space-between;
+        }
+        .rec-list li:last-child {
+            border-bottom: none;
+        }
+        .rec-list .tag {
+            background: #e8f0fe;
+            color: #1a3c5e;
+            padding: 2px 12px;
+            border-radius: 20px;
+            font-size: 13px;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- 左侧菜单 -->
+    <div class="sidebar">
+        <div class="logo">💊 <span>药智</span>O2O</div>
+        <div class="menu-item active" data-page="page1">🏠 系统首页</div>
+        <div class="menu-item" data-page="page2">📊 数据总览</div>
+        <div class="menu-item" data-page="page3">📈 药品销售分析</div>
+        <div class="menu-item" data-page="page4">👥 用户分层画像</div>
+        <div class="menu-item" data-page="page5">🔮 销量预测</div>
+        <div class="menu-item" data-page="page6">🔗 关联推荐</div>
+    </div>
+
+    <!-- 右侧主内容 -->
+    <div class="main">
+
+        <!-- ========= 页面1：系统首页 ========= -->
+        <div id="page1" class="page active">
+            <h2 style="margin-bottom:20px;">系统首页</h2>
+            <div class="card-row">
+                <div class="card-box"><div class="label">📦 今日订单数</div><div class="num">1,284</div></div>
+                <div class="card-box green"><div class="label">💰 本月销售额</div><div class="num">¥68.2万</div></div>
+                <div class="card-box orange"><div class="label">👤 活跃用户数</div><div class="num">3,456</div></div>
+            </div>
+            <div style="background:white; border-radius:12px; padding:20px; box-shadow:0 2px 10px rgba(0,0,0,0.04);">
+                <h4>欢迎使用 O2O 药品大数据分析平台</h4>
+                <p style="color:#666; margin-top:10px;">当前展示为静态原型框架，数据均来自 ECharts 示例假数据，用于演示布局与交互。</p>
+            </div>
+        </div>
+
+        <!-- ========= 页面2：数据总览看板 ========= -->
+        <div id="page2" class="page">
+            <h2 style="margin-bottom:20px;">数据总览看板</h2>
+            <div class="card-row">
+                <div class="card-box"><div class="label">📦 今日订单</div><div class="num">1,284</div></div>
+                <div class="card-box green"><div class="label">💰 本月销售</div><div class="num">¥68.2万</div></div>
+                <div class="card-box orange"><div class="label">👤 活跃用户</div><div class="num">3,456</div></div>
+                <div class="card-box purple"><div class="label">🧾 客单价</div><div class="num">¥198</div></div>
+            </div>
+            <div class="chart-box" style="margin-top:0;">
+                <h4>近7日销售额趋势</h4>
+                <div id="chart2" class="chart-wrap" style="height:360px;"></div>
+            </div>
+        </div>
+
+        <!-- ========= 页面3：药品销售分析 ========= -->
+        <div id="page3" class="page">
+            <h2 style="margin-bottom:20px;">药品销售分析</h2>
+            <div class="chart-container">
+                <div class="chart-box"><h4>药品销量与销售额对比</h4><div id="chart3_left" class="chart-wrap"></div></div>
+                <div class="chart-box"><h4>销售额 Top 10 药品</h4><div id="chart3_right" class="chart-wrap"></div></div>
+            </div>
+        </div>
+
+        <!-- ========= 页面4：用户分层画像 ========= -->
+        <div id="page4" class="page">
+            <h2 style="margin-bottom:20px;">用户分层画像</h2>
+            <div class="chart-container">
+                <div class="chart-box"><h4>四类人群占比</h4><div id="chart4_pie" class="chart-wrap"></div></div>
+                <div class="chart-box"><h4>四类人群特征雷达图</h4><div id="chart4_radar" class="chart-wrap"></div></div>
+            </div>
+            <div class="desc-text">
+                <p><strong>🟢 养生保健族 (35%)：</strong> 注重维生素、保健品，消费频次中等，客单价较高。</p>
+                <p><strong>🔵 慢病管理族 (30%)：</strong> 高血压/糖尿病用药为主，复购率极高，对价格敏感。</p>
+                <p><strong>🟠 急症应急族 (20%)：</strong> 感冒药、退烧药，下单时间集中在夜间和周末。</p>
+                <p><strong>🟣 母婴育儿族 (15%)：</strong> 钙片、儿童用药，关注品牌安全性，客单价最高。</p>
+            </div>
+        </div>
+
+        <!-- ========= 页面5：销量预测 ========= -->
+        <div id="page5" class="page">
+            <h2 style="margin-bottom:20px;">销量预测</h2>
+            <div class="filter-bar">
+                <label>选择药品：</label>
+                <select><option>阿莫西林胶囊</option><option>感冒灵颗粒</option><option selected>布洛芬缓释胶囊</option></select>
+                <label>预测日期：</label>
+                <input type="date" value="2026-08-20">
+                <button>开始预测</button>
+            </div>
+            <div class="chart-box">
+                <h4>历史销量 vs 预测销量（蓝色：历史，橙色：预测）</h4>
+                <div id="chart5" class="chart-wrap" style="height:400px;"></div>
+            </div>
+        </div>
+
+        <!-- ========= 页面6：关联推荐 ========= -->
+        <div id="page6" class="page">
+            <h2 style="margin-bottom:20px;">关联推荐</h2>
+            <div class="filter-bar">
+                <label>输入药品名：</label>
+                <input type="text" placeholder="例如：布洛芬" value="布洛芬缓释胶囊" style="width:240px;">
+                <button>推荐关联药品</button>
+            </div>
+            <div class="rec-list">
+                <ul>
+                    <li><span>💊 对乙酰氨基酚片</span> <span class="tag">关联度 92%</span></li>
+                    <li><span>💊 感冒灵颗粒</span> <span class="tag">关联度 85%</span></li>
+                    <li><span>💊 维生素C泡腾片</span> <span class="tag">关联度 73%</span></li>
+                    <li><span>💊 盐酸氨溴索口服液</span> <span class="tag">关联度 68%</span></li>
+                    <li><span>💊 头孢克肟分散片</span> <span class="tag">关联度 52%</span></li>
+                </ul>
+            </div>
+        </div>
+
+    </div>
+
+    <script>
+        // ===== 1. 菜单切换逻辑 =====
+        const menuItems = document.querySelectorAll('.menu-item');
+        const pages = {
+            page1: document.getElementById('page1'),
+            page2: document.getElementById('page2'),
+            page3: document.getElementById('page3'),
+            page4: document.getElementById('page4'),
+            page5: document.getElementById('page5'),
+            page6: document.getElementById('page6'),
+        };
+
+        menuItems.forEach(item => {
+            item.addEventListener('click', function() {
+                // 切换菜单高亮
+                menuItems.forEach(m => m.classList.remove('active'));
+                this.classList.add('active');
+                // 切换页面
+                const pageId = this.dataset.page;
+                Object.keys(pages).forEach(key => {
+                    pages[key].classList.remove('active');
+                });
+                pages[pageId].classList.add('active');
+
+                // 切换页面后重新渲染图表（因为display:none时无法计算宽高）
+                setTimeout(() => {
+                    renderAllCharts();
+                }, 100);
+            });
+        });
+
+        // ===== 2. ECharts 渲染函数 =====
+        function renderAllCharts() {
+           // --- 页面2：折线图（从数据库获取真实数据）---
+const dom2 = document.getElementById('chart2');
+if (dom2.offsetParent !== null) {
+    // 发起请求，获取后端数据
+    fetch('http://localhost/o2o/get_sales.php')
+        .then(response => response.json())
+        .then(data => {
+            // 如果后端返回了错误信息，就报错
+            if (data.error) {
+                console.error(data.error);
+                return;
+            }
+            // 初始化 ECharts 图表
+            const myChart2 = echarts.init(dom2);
+            myChart2.setOption({
+                tooltip: { trigger: 'axis' },
+                xAxis: { type: 'category', data: data.dates }, // 日期来自数据库
+                yAxis: { type: 'value', name: '销售额 (元)' },
+                series: [{
+                    data: data.amounts, // 金额来自数据库
+                    type: 'line',
+                    smooth: true,
+                    lineStyle: { color: '#1a3c5e', width: 3 },
+                    areaStyle: { color: 'rgba(26, 60, 94, 0.1)' }
+                }]
+            });
+            window.addEventListener('resize', () => myChart2.resize());
+        })
+        .catch(err => {
+            console.error('请求数据失败:', err);
+        });
+}
+
+            // --- 页面3左：混合图 ---
+            const dom3L = document.getElementById('chart3_left');
+            if (dom3L.offsetParent !== null) {
+                const chart3L = echarts.init(dom3L);
+                chart3L.setOption({
+                    tooltip: { trigger: 'axis' },
+                    legend: { data: ['销量 (盒)', '销售额 (万元)'] },
+                    xAxis: { type: 'category', data: ['阿莫西林', '感冒灵', '布洛芬', '头孢', '维生素C'] },
+                    yAxis: [{ type: 'value', name: '销量' }, { type: 'value', name: '销售额', min: 0 }],
+                    series: [{
+                        name: '销量 (盒)',
+                        type: 'bar',
+                        data: [420, 580, 350, 290, 510],
+                        color: '#3b8fc2'
+                    }, {
+                        name: '销售额 (万元)',
+                        type: 'line',
+                        yAxisIndex: 1,
+                        data: [5.2, 3.8, 6.5, 4.1, 2.9],
+                        color: '#f5a623',
+                        smooth: true
+                    }]
+                });
+                window.addEventListener('resize', () => chart3L.resize());
+            }
+
+            // --- 页面3右：Top10柱状图 ---
+            const dom3R = document.getElementById('chart3_right');
+            if (dom3R.offsetParent !== null) {
+                const chart3R = echarts.init(dom3R);
+                chart3R.setOption({
+                    tooltip: { trigger: 'axis' },
+                    xAxis: { type: 'category', data: ['布洛芬', '阿莫西林', '感冒灵', '头孢', 'VC片', '降压药', '降糖药', '钙片', '退热贴', '创可贴'] },
+                    yAxis: { type: 'value', name: '销售额 (万元)' },
+                    series: [{
+                        type: 'bar',
+                        data: [12.5, 9.8, 8.4, 7.2, 6.9, 6.1, 5.8, 5.2, 4.0, 3.5],
+                        itemStyle: { color: '#4caf84' }
+                    }]
+                });
+                window.addEventListener('resize', () => chart3R.resize());
+            }
+
+            // --- 页面4左：饼图 ---
+            const dom4P = document.getElementById('chart4_pie');
+            if (dom4P.offsetParent !== null) {
+                const chart4P = echarts.init(dom4P);
+                chart4P.setOption({
+                    tooltip: { trigger: 'item' },
+                    legend: { orient: 'vertical', left: 'left' },
+                    series: [{
+                        type: 'pie',
+                        radius: '60%',
+                        data: [
+                            { value: 35, name: '养生保健族', itemStyle: { color: '#4caf84' } },
+                            { value: 30, name: '慢病管理族', itemStyle: { color: '#3b8fc2' } },
+                            { value: 20, name: '急症应急族', itemStyle: { color: '#f5a623' } },
+                            { value: 15, name: '母婴育儿族', itemStyle: { color: '#a389d4' } }
+                        ],
+                        label: { formatter: '{b}\n{d}%' }
+                    }]
+                });
+                window.addEventListener('resize', () => chart4P.resize());
+            }
+
+            // --- 页面4右：雷达图 ---
+            const dom4R = document.getElementById('chart4_radar');
+            if (dom4R.offsetParent !== null) {
+                const chart4R = echarts.init(dom4R);
+                chart4R.setOption({
+                    radar: {
+                        indicator: [
+                            { name: '消费频次', max: 10 },
+                            { name: '客单价', max: 10 },
+                            { name: '品牌敏感度', max: 10 },
+                            { name: '促销敏感度', max: 10 },
+                            { name: '用药规律性', max: 10 }
+                        ],
+                        shape: 'circle',
+                        center: ['50%', '50%'],
+                        radius: '65%'
+                    },
+                    series: [{
+                        type: 'radar',
+                        data: [{
+                            value: [5, 8, 4, 7, 3],
+                            name: '养生保健族',
+                            areaStyle: { color: 'rgba(76, 175, 132, 0.3)' },
+                            lineStyle: { color: '#4caf84' }
+                        }, {
+                            value: [9, 5, 3, 9, 10],
+                            name: '慢病管理族',
+                            areaStyle: { color: 'rgba(59, 143, 194, 0.3)' },
+                            lineStyle: { color: '#3b8fc2' }
+                        }, {
+                            value: [6, 6, 2, 8, 2],
+                            name: '急症应急族',
+                            areaStyle: { color: 'rgba(245, 166, 35, 0.3)' },
+                            lineStyle: { color: '#f5a623' }
+                        }, {
+                            value: [4, 9, 9, 2, 4],
+                            name: '母婴育儿族',
+                            areaStyle: { color: 'rgba(163, 137, 212, 0.3)' },
+                            lineStyle: { color: '#a389d4' }
+                        }],
+                        legend: { data: ['养生保健族', '慢病管理族', '急症应急族', '母婴育儿族'] }
+                    }]
+                });
+                window.addEventListener('resize', () => chart4R.resize());
+            }
+
+            // --- 页面5：预测柱状图 ---
+            const dom5 = document.getElementById('chart5');
+            if (dom5.offsetParent !== null) {
+                const chart5 = echarts.init(dom5);
+                chart5.setOption({
+                    tooltip: { trigger: 'axis' },
+                    legend: { data: ['历史销量', '预测销量'] },
+                    xAxis: { type: 'category', data: ['01月', '02月', '03月', '04月', '05月', '06月', '07月', '08月(预)'] },
+                    yAxis: { type: 'value', name: '销量 (盒)' },
+                    series: [{
+                        name: '历史销量',
+                        type: 'bar',
+                        data: [320, 280, 410, 390, 520, 480, 560, null],
+                        itemStyle: { color: '#3b8fc2' }
+                    }, {
+                        name: '预测销量',
+                        type: 'bar',
+                        data: [null, null, null, null, null, null, null, 620],
+                        itemStyle: { color: '#f5a623' }
+                    }]
+                });
+                window.addEventListener('resize', () => chart5.resize());
+            }
+        }
+
+        // ===== 3. 页面加载完成后初始化 =====
+        window.onload = function() {
+            // 默认只渲染可见页面（首页page1没有图表，但我们让所有图表延迟统一渲染）
+            setTimeout(() => {
+                renderAllCharts();
+            }, 200);
+
+            // 窗口改变时重绘（所有图表实例在render中已绑定resize，但这里可以额外触发）
+            window.addEventListener('resize', () => {
+                // 因为已经绑定了每个图表的resize，无需重复
+            });
+        };
+
+        // 覆盖一下resize防止重复绑定（上面每个图表都单独绑了，此处不再全局遍历，以免冲突）
+        // 但部分图表可能因为display:none未初始化，切换页面时会重新执行renderAllCharts，已处理。
+    </script>
+
+</body>
+</html>
