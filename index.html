@@ -679,6 +679,12 @@
                 </select>
                 <button id="recommendBtn">🔍 推荐关联药品</button>
             </div>
+            <!-- 病症快速推荐：词典映射 + 关联扩展 -->
+            <div class="filter-bar" style="margin-top:12px; flex-wrap:wrap;">
+                <label>按病症快速推荐：</label>
+                <div id="symptomTags" style="display:flex; gap:8px; flex-wrap:wrap;"></div>
+            </div>
+            <div id="symptomResult" class="rec-list" style="display:none;"></div>
             <div class="rec-list">
                 <ul id="recommendList">
                     <li style="justify-content:center;color:#999;padding:30px 0;">💡 请选择或输入药品名，点击“推荐关联药品”查看结果</li>
@@ -1283,6 +1289,67 @@
         }
 
         // ============================================================
+        // 7b. 病症推荐（词典映射 + 关联扩展）
+        // ============================================================
+        function loadSymptomTags() {
+            const box = document.getElementById('symptomTags');
+            if (!box) return;
+            fetchAPI('api/symptom_recommend.php')
+                .then(res => {
+                    if (res.code === 200 && Array.isArray(res.data)) {
+                        box.innerHTML = res.data.map(item =>
+                            `<button class="symptom-chip" data-symptom="${item.symptom}" style="padding:6px 14px; border:1px solid #cbd5e1; border-radius:16px; background:#fff; cursor:pointer; font-size:13px; color:#334155;">${item.symptom} <span style="color:#94a3b8; font-size:11px;">${item.drug_count}</span></button>`
+                        ).join('');
+                        box.querySelectorAll('.symptom-chip').forEach(chip => {
+                            chip.addEventListener('click', () => loadSymptomRecommend(chip.dataset.symptom));
+                        });
+                    }
+                })
+                .catch(err => console.error('加载病症标签失败:', err));
+        }
+
+        function loadSymptomRecommend(symptom) {
+            const box = document.getElementById('symptomResult');
+            if (!box) return;
+            box.style.display = 'block';
+            box.innerHTML = '<div style="text-align:center;color:#999;padding:20px;">⏳ 正在生成推荐…</div>';
+            document.querySelectorAll('.symptom-chip').forEach(chip => {
+                const active = chip.dataset.symptom === symptom;
+                chip.style.background = active ? '#1a3c5e' : '#fff';
+                chip.style.color = active ? '#fff' : '#334155';
+                chip.style.borderColor = active ? '#1a3c5e' : '#cbd5e1';
+            });
+
+            fetchAPI(`api/symptom_recommend.php?symptom=${encodeURIComponent(symptom)}`)
+                .then(res => {
+                    if (res.code !== 200 || !res.data) {
+                        box.innerHTML = `<div style="text-align:center;color:#999;padding:20px;">${res.message || '暂无推荐'}</div>`;
+                        return;
+                    }
+                    const d = res.data;
+                    const mainHtml = d.mains.map(item => {
+                        const rx = item.is_prescription == 1 ? ' <span class="tag" style="color:#b91c1c;">⚠️ 处方药</span>' : '';
+                        return `<li><span>💊 ${item.drug_name}</span> <span class="tag">销量 ${item.sales} 盒 · ${item.reason}</span>${rx}</li>`;
+                    }).join('');
+                    const comboHtml = d.combos.length
+                        ? d.combos.map(item =>
+                            `<li><span>🔗 ${item.drug_name}</span> <span class="tag">共同购买 ${item.co_orders} 单 · 销量 ${item.sales} 盒</span></li>`
+                        ).join('')
+                        : '<li style="justify-content:center;color:#999;">暂无搭配数据</li>';
+                    box.innerHTML = `
+                        <div style="font-weight:bold; color:#1a3c5e; margin:14px 0 6px;">主治推荐（${d.symptom}）</div>
+                        <ul>${mainHtml}</ul>
+                        <div style="font-weight:bold; color:#1a3c5e; margin:14px 0 6px;">搭配推荐（基于真实购买关联）</div>
+                        <ul>${comboHtml}</ul>
+                        <p style="color:#94a3b8; font-size:12px; margin-top:10px;">⚠️ 以上推荐仅供健康参考，请遵医嘱或咨询药师；标注处方药的请在药师指导下购买使用。</p>`;
+                })
+                .catch(err => {
+                    console.error('病症推荐加载失败:', err);
+                    box.innerHTML = '<div style="text-align:center;color:#999;padding:20px;">加载失败，请重试</div>';
+                });
+        }
+
+        // ============================================================
         // 8. 特征重要性
         // ============================================================
         function loadFeatureImportance(drugName) {
@@ -1565,6 +1632,7 @@
             loadDrugList();
             loadRecommendSelect();
             bindRecommendInputs();
+            loadSymptomTags();
 
             document.getElementById('recommendList').innerHTML =
                 '<li style="justify-content:center;color:#999;padding:30px 0;">💡 请选择或输入药品名，点击“推荐关联药品”查看结果</li>';
