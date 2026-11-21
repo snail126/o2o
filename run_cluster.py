@@ -32,67 +32,79 @@ print("数据库连接成功。")
 
 # ==================== 天气函数 ====================
 def get_weather_for_dates(lat, lon, start_date, end_date):
+    # 历史天气不会变，缓存可以永久保留
     cache_session = requests_cache.CachedSession('.cache', expire_after=-1)
-    retry_session = retry(cache_session, retries=5, backoff_factor=0.2)
+    retry_session = retry(cache_session, retries=3, backoff_factor=0.5)
     openmeteo = openmeteo_requests.Client(session=retry_session)
     url = "https://archive-api.open-meteo.com/v1/archive"
     params = {
-        "latitude": lat,
-        "longitude": lon,
-        "start_date": start_date,
-        "end_date": end_date,
-        "daily": ["temperature_2m_max", "temperature_2m_min", 
-                  "precipitation_sum", "wind_speed_10m_max"],
+        "latitude": lat, "longitude": lon,
+        "start_date": start_date, "end_date": end_date,
+        "daily": ["temperature_2m_max", "temperature_2m_min", "precipitation_sum", "wind_speed_10m_max"],
         "timezone": "Asia/Shanghai"
     }
-    responses = openmeteo.weather_api(url, params=params)
-    response = responses[0]
-    daily = response.Daily()
-    daily_data = {
-        "date": pd.date_range(
-            start=pd.to_datetime(daily.Time(), unit="s"),
-            end=pd.to_datetime(daily.TimeEnd(), unit="s"),
-            freq=pd.Timedelta(seconds=daily.Interval()),
-            inclusive="left"
-        ),
-        "temp_max": daily.Variables(0).ValuesAsNumpy(),
-        "temp_min": daily.Variables(1).ValuesAsNumpy(),
-        "precipitation": daily.Variables(2).ValuesAsNumpy(),
-        "wind_speed": daily.Variables(3).ValuesAsNumpy()
-    }
-    df = pd.DataFrame(data=daily_data)
-    df['date'] = df['date'].dt.date
-    return df
+    
+    try:
+        responses = openmeteo.weather_api(url, params=params)
+        response = responses[0]
+        daily = response.Daily()
+        daily_data = {
+            "date": pd.date_range(
+                start=pd.to_datetime(daily.Time(), unit="s"),
+                end=pd.to_datetime(daily.TimeEnd(), unit="s"),
+                freq=pd.Timedelta(seconds=daily.Interval()),
+                inclusive="left"
+            ),
+            "temp_max": daily.Variables(0).ValuesAsNumpy(),
+            "temp_min": daily.Variables(1).ValuesAsNumpy(),
+            "precipitation": daily.Variables(2).ValuesAsNumpy(),
+            "wind_speed": daily.Variables(3).ValuesAsNumpy()
+        }
+        df = pd.DataFrame(data=daily_data)
+        df['date'] = df['date'].dt.date
+        return df
+    except Exception as e:
+        print(f"⚠️ 获取历史天气失败，使用默认值填补: {e}")
+        dates = pd.date_range(start=start_date, end=end_date)
+        return pd.DataFrame({
+            'date': dates.date, 'temp_max': 20.0, 'temp_min': 10.0, 'precipitation': 0.0, 'wind_speed': 5.0
+        })
 
 def get_weather_forecast(lat, lon, days=7):
-    cache_session = requests_cache.CachedSession('.cache', expire_after=-1)
-    retry_session = retry(cache_session, retries=5, backoff_factor=0.2)
+    # 修复：天气预报每 6 小时更新一次，缓存过期时间设为 6 小时
+    cache_session = requests_cache.CachedSession('.cache', expire_after=timedelta(hours=6))
+    retry_session = retry(cache_session, retries=3, backoff_factor=0.5)
     openmeteo = openmeteo_requests.Client(session=retry_session)
     url = "https://api.open-meteo.com/v1/forecast"
     params = {
-        "latitude": lat,
-        "longitude": lon,
-        "daily": ["temperature_2m_max", "temperature_2m_min", 
-                  "precipitation_sum", "wind_speed_10m_max"],
-        "timezone": "Asia/Shanghai",
-        "forecast_days": days
+        "latitude": lat, "longitude": lon,
+        "daily": ["temperature_2m_max", "temperature_2m_min", "precipitation_sum", "wind_speed_10m_max"],
+        "timezone": "Asia/Shanghai", "forecast_days": days
     }
-    responses = openmeteo.weather_api(url, params=params)
-    response = responses[0]
-    daily = response.Daily()
-    dates = pd.date_range(
-        start=pd.to_datetime(daily.Time(), unit="s"),
-        periods=days,
-        freq=pd.Timedelta(seconds=daily.Interval())
-    )
-    forecast_df = pd.DataFrame({
-        'date': dates.date,
-        'temp_max': daily.Variables(0).ValuesAsNumpy(),
-        'temp_min': daily.Variables(1).ValuesAsNumpy(),
-        'precipitation': daily.Variables(2).ValuesAsNumpy(),
-        'wind_speed': daily.Variables(3).ValuesAsNumpy()
-    })
-    return forecast_df
+    
+    try:
+        responses = openmeteo.weather_api(url, params=params)
+        response = responses[0]
+        daily = response.Daily()
+        dates = pd.date_range(
+            start=pd.to_datetime(daily.Time(), unit="s"),
+            periods=days,
+            freq=pd.Timedelta(seconds=daily.Interval())
+        )
+        forecast_df = pd.DataFrame({
+            'date': dates.date,
+            'temp_max': daily.Variables(0).ValuesAsNumpy(),
+            'temp_min': daily.Variables(1).ValuesAsNumpy(),
+            'precipitation': daily.Variables(2).ValuesAsNumpy(),
+            'wind_speed': daily.Variables(3).ValuesAsNumpy()
+        })
+        return forecast_df
+    except Exception as e:
+        print(f"⚠️ 获取未来天气预报失败，使用默认值填补: {e}")
+        dates = [datetime.today().date() + timedelta(days=i) for i in range(1, days+1)]
+        return pd.DataFrame({
+            'date': dates, 'temp_max': 20.0, 'temp_min': 10.0, 'precipitation': 0.0, 'wind_speed': 5.0
+        })
 # ==================================================
 
 # 1. 读取数据
@@ -131,9 +143,12 @@ rfm = order_df.groupby('user_id').agg(
     F=('order_id', 'nunique'),
     M=('total_price', 'sum')
 ).reset_index()
-rfm['R_score'] = pd.qcut(rfm['R'], 5, labels=[5,4,3,2,1])
-rfm['F_score'] = pd.qcut(rfm['F'].rank(method='first'), 5, labels=[1,2,3,4,5])
-rfm['M_score'] = pd.qcut(rfm['M'].rank(method='first'), 5, labels=[1,2,3,4,5])
+
+# 修复：增加 rank 处理，防止因 R 值大量重复导致 qcut 报错
+rfm['R_score'] = pd.qcut(rfm['R'].rank(method='first'), 5, labels=[5,4,3,2,1], duplicates='drop')
+rfm['F_score'] = pd.qcut(rfm['F'].rank(method='first'), 5, labels=[1,2,3,4,5], duplicates='drop')
+rfm['M_score'] = pd.qcut(rfm['M'].rank(method='first'), 5, labels=[1,2,3,4,5], duplicates='drop')
+
 features = rfm[['R', 'F', 'M']]
 scaler = StandardScaler()
 features_scaled = scaler.fit_transform(features)
@@ -249,7 +264,7 @@ global_df = pd.DataFrame(
 global_df.to_sql('feature_importance', engine, if_exists='append', index=False)
 print("全局特征重要性写入完成。")
 
-# ========== 为每种药品训练专属模型（修复了类型错误） ==========
+# ========== 为每种药品训练专属模型 ==========
 print("\n正在为每种药品训练专属模型（用于差异化重要性）...")
 cursor.execute("""
 CREATE TABLE IF NOT EXISTS drug_feature_importance (
@@ -270,27 +285,21 @@ fail_count = 0
 
 for idx, drug_name in enumerate(drug_list_str):
     try:
-        # 获取该药品数据，并复制
         drug_df_raw = daily_sales[daily_sales['drug_name'] == drug_name].copy()
         if len(drug_df_raw) < 10:
             print(f"  药品 {drug_name} 数据量不足 ({len(drug_df_raw)} 条)，跳过")
             fail_count += 1
             continue
         
-        # 关键修复：先移除 drug_name 列，避免 asfreq 将其填充为 0
         drug_df_temp = drug_df_raw.drop(columns=['drug_name'])
         drug_df_full = drug_df_temp.set_index('date').asfreq('D', fill_value=0).reset_index()
-        # 重新添加 drug_name 列
         drug_df_full['drug_name'] = drug_name
         
-        # 计算星期、月份等
         drug_df_full['weekday'] = drug_df_full['date'].dt.dayofweek
         drug_df_full['month'] = drug_df_full['date'].dt.month
         drug_df_full['is_weekend'] = drug_df_full['weekday'].isin([5,6]).astype(int)
-        # 天气填充
         for col in ['temp_max', 'temp_min', 'precipitation', 'wind_speed']:
             drug_df_full[col] = drug_df_full[col].ffill().fillna(0)
-        # 滞后特征
         for lag in range(1, 8):
             drug_df_full[f'lag_{lag}'] = drug_df_full['daily_sales'].shift(lag)
         drug_df_full['rolling_mean_7'] = drug_df_full['daily_sales'].rolling(7).mean()
@@ -301,7 +310,6 @@ for idx, drug_name in enumerate(drug_list_str):
             fail_count += 1
             continue
         
-        # 准备训练数据
         X_drug = drug_df_full[feature_cols]
         y_drug = drug_df_full['daily_sales']
         max_drug_date = drug_df_full['date'].max()
@@ -314,7 +322,6 @@ for idx, drug_name in enumerate(drug_list_str):
         model_drug = XGBRegressor(n_estimators=100, learning_rate=0.1, max_depth=5, random_state=42)
         model_drug.fit(X_drug[train_mask_drug], y_drug[train_mask_drug])
         
-        # 计算重要性并插入数据库
         drug_imp = dict(zip(feature_cols, model_drug.feature_importances_))
         for f_name, imp in drug_imp.items():
             cursor.execute(
@@ -336,10 +343,14 @@ print(f"药品专属重要性训练完成：成功 {success_count} 种，跳过/
 
 print("模型训练完成，正在预测未来7天...")
 
+# 修复核心：预测起点必须从“今天”开始（如果历史数据晚于今天，则取最后一天）
+today = pd.Timestamp.today().normalize()
+last_date = max(max_date, today)
+future_dates = [last_date + timedelta(days=i) for i in range(1, 8)]
+
+# 获取未来天气预报
 future_weather = get_weather_forecast(lat, lon, 7)
 future_weather['date'] = pd.to_datetime(future_weather['date']).dt.date
-last_date = max_date
-future_dates = [last_date + timedelta(days=i) for i in range(1, 8)]
 predict_results = []
 
 for drug in drug_list_str:
