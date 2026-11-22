@@ -1,20 +1,21 @@
-# -*- coding: utf-8 -*-
-import pandas as pd
-import numpy as np
+import warnings
 from datetime import datetime, timedelta
+
+import numpy as np
+import pandas as pd
 from sklearn.cluster import KMeans
 from sklearn.preprocessing import StandardScaler
 from xgboost import XGBRegressor
-import warnings
-warnings.filterwarnings('ignore')
 
-import pymysql
-from sqlalchemy import create_engine
+warnings.filterwarnings('ignore')
 
 # ---------- 天气相关库 ----------
 import openmeteo_requests
+import pymysql
 import requests_cache
 from retry_requests import retry
+from sqlalchemy import create_engine
+
 # --------------------------------
 
 DB_USER = 'root'
