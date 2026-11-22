@@ -574,6 +574,12 @@
                 <h4>欢迎使用 O2O 药品大数据分析平台</h4>
                 <p id="welcomeInfo" style="color:#666; margin-top:10px;">数据加载中...</p>
             </div>
+            <div class="chart-box">
+                <h4>📝 本月经营简报</h4>
+                <p style="color:#888; font-size:13px; margin:6px 0 12px;">自动汇总最新月份销售额、订单、客单价环比及热销药品，一键生成文字简报。</p>
+                <button id="reportBtn" class="btn-run">📝 生成本月经营简报</button>
+                <div id="reportResult" style="margin-top:14px;"></div>
+            </div>
         </div>
 
         <!-- 页面2：数据总览 -->
@@ -594,6 +600,16 @@
                     </div>
                 </div>
                 <div id="chart2" class="chart-wrap" style="height:360px;"></div>
+            </div>
+            <div class="chart-box" style="margin-top:20px;">
+                <h4>📦 热销药品库存预警</h4>
+                <p style="color:#888; font-size:13px; margin:6px 0 12px;">按近30天日均销量估算可售天数（以数据最新日期为基准）：🔴 少于7天紧急备货，🟡 少于15天建议关注。💡 演示时可把库存调小（如 100 或 50）观察预警效果。</p>
+                <div class="filter-bar" style="margin-bottom:12px;">
+                    <label>当前库存（盒）：</label>
+                    <input type="number" id="stockInput" value="500" min="1" style="width:120px;">
+                    <button id="stockBtn" class="btn-run">🔍 检测库存风险</button>
+                </div>
+                <div id="stockResult"></div>
             </div>
         </div>
 
@@ -1410,7 +1426,128 @@
         }
 
         // ============================================================
-        // 9. 特征重要性
+        // 9. 月度经营简报
+        // ============================================================
+        function loadMonthlyReport() {
+            const box = document.getElementById('reportResult');
+            if (!box) return;
+            box.innerHTML = '<div style="text-align:center;color:#999;padding:20px;">⏳ 正在生成简报…</div>';
+
+            fetchAPI('api/monthly_report.php')
+                .then(res => {
+                    if (res.code !== 200 || !res.data) {
+                        box.innerHTML = `<div style="text-align:center;color:#999;padding:20px;">${res.message || '暂无数据'}</div>`;
+                        return;
+                    }
+                    const d = res.data;
+                    const arrow = v => v >= 0
+                        ? `<span style="color:#b91c1c;">↑ ${v}%</span>`
+                        : `<span style="color:#15803d;">↓ ${Math.abs(v)}%</span>`;
+                    const kpiHtml = `
+                        <div style="display:flex; gap:12px; flex-wrap:wrap; margin-bottom:14px;">
+                            <div style="flex:1; min-width:140px; background:#f8fafc; border-radius:8px; padding:10px 14px;">
+                                <div style="font-size:12px; color:#64748b;">💰 销售额</div>
+                                <div style="font-size:18px; font-weight:bold; color:#1a3c5e;">¥${Number(d.cur_sales).toLocaleString()}</div>
+                                <div style="font-size:12px;">环比 ${arrow(d.sales_change)}</div>
+                            </div>
+                            <div style="flex:1; min-width:140px; background:#f8fafc; border-radius:8px; padding:10px 14px;">
+                                <div style="font-size:12px; color:#64748b;">🧾 订单数</div>
+                                <div style="font-size:18px; font-weight:bold; color:#1a3c5e;">${d.cur_orders} 单</div>
+                                <div style="font-size:12px;">环比 ${arrow(d.orders_change)}</div>
+                            </div>
+                            <div style="flex:1; min-width:140px; background:#f8fafc; border-radius:8px; padding:10px 14px;">
+                                <div style="font-size:12px; color:#64748b;">👤 客单价</div>
+                                <div style="font-size:18px; font-weight:bold; color:#1a3c5e;">¥${d.cur_avg}</div>
+                                <div style="font-size:12px;">环比 ${arrow(d.avg_change)}</div>
+                            </div>
+                        </div>`;
+                    const topHtml = d.top10.map((t, i) => {
+                        const chg = t.change === null ? '新增热销' : arrow(t.change);
+                        return `<tr>
+                            <td style="padding:6px 10px; border-bottom:1px solid #e2e8f0; text-align:center;">${i + 1}</td>
+                            <td style="padding:6px 10px; border-bottom:1px solid #e2e8f0;">💊 ${t.drug_name}</td>
+                            <td style="padding:6px 10px; border-bottom:1px solid #e2e8f0; text-align:center;">${t.cur_num} 盒</td>
+                            <td style="padding:6px 10px; border-bottom:1px solid #e2e8f0; text-align:center;">¥${Number(t.cur_amount).toLocaleString()}</td>
+                            <td style="padding:6px 10px; border-bottom:1px solid #e2e8f0; text-align:center;">${chg}</td>
+                        </tr>`;
+                    }).join('');
+                    box.innerHTML = `
+                        ${kpiHtml}
+                        <div style="background:#eff6ff; border-left:4px solid #1a3c5e; border-radius:6px; padding:12px 16px; white-space:pre-line; font-size:14px; color:#1e293b; line-height:1.8;">${d.report}</div>
+                        <details style="margin-top:12px;">
+                            <summary style="cursor:pointer; color:#1a3c5e; font-weight:bold; padding:6px 0;">📋 查看热销 Top10 明细（${d.month}）</summary>
+                            <table style="width:100%; border-collapse:collapse; font-size:13px; margin-top:8px;">
+                                <thead><tr style="background:#1a3c5e; color:#fff;">
+                                    <th style="padding:6px 10px;">排名</th><th style="padding:6px 10px; text-align:left;">药品</th>
+                                    <th style="padding:6px 10px;">本月销量</th><th style="padding:6px 10px;">销售额</th><th style="padding:6px 10px;">销量环比</th>
+                                </tr></thead>
+                                <tbody>${topHtml}</tbody>
+                            </table>
+                        </details>`;
+                })
+                .catch(err => {
+                    console.error('简报加载失败:', err);
+                    box.innerHTML = '<div style="text-align:center;color:#999;padding:20px;">加载失败，请重试</div>';
+                });
+        }
+
+        // ============================================================
+        // 10. 库存预警
+        // ============================================================
+        function loadStockAlert() {
+            const box = document.getElementById('stockResult');
+            if (!box) return;
+            const stock = parseInt(document.getElementById('stockInput').value, 10) || 500;
+            box.innerHTML = '<div style="text-align:center;color:#999;padding:20px;">⏳ 正在检测…</div>';
+
+            fetchAPI(`api/stock_alert.php?stock=${stock}`)
+                .then(res => {
+                    if (res.code !== 200 || !res.data) {
+                        box.innerHTML = `<div style="text-align:center;color:#999;padding:20px;">${res.message || '暂无数据'}</div>`;
+                        return;
+                    }
+                    const d = res.data;
+                    const rows = d.list.map(item => {
+                        const bg = item.level === 'urgent' ? '#fef2f2' : (item.level === 'watch' ? '#fefce8' : '#f0fdf4');
+                        const color = item.level === 'urgent' ? '#b91c1c' : (item.level === 'watch' ? '#a16207' : '#15803d');
+                        const chg = item.change === null ? '—' : (item.change >= 0 ? `+${item.change}%` : `${item.change}%`);
+                        const days = item.days_left >= 999 ? '极充足' : `${item.days_left} 天`;
+                        return `<tr style="background:${bg};">
+                            <td style="padding:7px 10px; border-bottom:1px solid #e2e8f0;">💊 ${item.drug_name}</td>
+                            <td style="padding:7px 10px; border-bottom:1px solid #e2e8f0; text-align:center;">${item.recent30} 盒</td>
+                            <td style="padding:7px 10px; border-bottom:1px solid #e2e8f0; text-align:center;">${item.daily_avg} 盒/天</td>
+                            <td style="padding:7px 10px; border-bottom:1px solid #e2e8f0; text-align:center; color:${color}; font-weight:bold;">${days}</td>
+                            <td style="padding:7px 10px; border-bottom:1px solid #e2e8f0; text-align:center;">${chg}</td>
+                            <td style="padding:7px 10px; border-bottom:1px solid #e2e8f0; text-align:center; color:${color};">${item.level_text}</td>
+                        </tr>`;
+                    }).join('');
+                    box.innerHTML = `
+                        <p style="color:#1a3c5e; font-weight:bold; margin:0 0 10px;">
+                            按当前库存 ${d.stock} 盒测算（数据截至 ${d.window_end}）：
+                            🔴 紧急 ${d.urgent} 个 · 🟡 关注 ${d.watch} 个 · 🟢 充足 ${d.normal} 个
+                        </p>
+                        <div style="overflow-x:auto; max-height:420px; overflow-y:auto;">
+                        <table style="width:100%; border-collapse:collapse; font-size:13px;">
+                            <thead><tr style="background:#1a3c5e; color:#fff;">
+                                <th style="padding:7px 10px; text-align:left;">药品</th>
+                                <th style="padding:7px 10px;">近30天销量</th>
+                                <th style="padding:7px 10px;">日均销量</th>
+                                <th style="padding:7px 10px;">预计可售</th>
+                                <th style="padding:7px 10px;">销量环比</th>
+                                <th style="padding:7px 10px;">预警级别</th>
+                            </tr></thead>
+                            <tbody>${rows}</tbody>
+                        </table>
+                        </div>`;
+                })
+                .catch(err => {
+                    console.error('库存检测失败:', err);
+                    box.innerHTML = '<div style="text-align:center;color:#999;padding:20px;">加载失败，请重试</div>';
+                });
+        }
+
+        // ============================================================
+        // 11. 特征重要性
         // ============================================================
         function loadFeatureImportance(drugName) {
             const listEl = document.getElementById('importanceList');
@@ -1697,6 +1834,16 @@
             const recallBtn = document.getElementById('recallBtn');
             if (recallBtn) {
                 recallBtn.addEventListener('click', loadRecallList);
+            }
+
+            const reportBtn = document.getElementById('reportBtn');
+            if (reportBtn) {
+                reportBtn.addEventListener('click', loadMonthlyReport);
+            }
+
+            const stockBtn = document.getElementById('stockBtn');
+            if (stockBtn) {
+                stockBtn.addEventListener('click', loadStockAlert);
             }
 
             document.getElementById('recommendList').innerHTML =
