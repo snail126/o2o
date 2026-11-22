@@ -638,6 +638,12 @@
                 <div class="chart-box"><h4>四类人群特征雷达图（R/F/M）</h4><div id="chart4_radar" class="chart-wrap"></div></div>
             </div>
             <div class="desc-text" id="segmentDescription"></div>
+            <div class="chart-box" style="margin-top:20px;">
+                <h4>📋 会员召回清单</h4>
+                <p style="color:#888; font-size:13px; margin:6px 0 12px;">针对流失预警客户生成电话/短信回访名单：含累计消费、最近购买时间与最常购买药品，便于精准召回。</p>
+                <button id="recallBtn" class="btn-run">📋 生成会员召回清单</button>
+                <div id="recallResult" style="margin-top:14px;"></div>
+            </div>
         </div>
 
         <!-- 页面5：销量预测 -->
@@ -1329,11 +1335,14 @@
                     const d = res.data;
                     const mainHtml = d.mains.map(item => {
                         const rx = item.is_prescription == 1 ? ' <span class="tag" style="color:#b91c1c;">⚠️ 处方药</span>' : '';
-                        return `<li><span>💊 ${item.drug_name}</span> <span class="tag">销量 ${item.sales} 盒 · ${item.reason}</span>${rx}</li>`;
+                        const warn = item.warning
+                            ? `<div style="font-size:12px; color:#b45309; background:#fef3c7; border-radius:6px; padding:4px 10px; margin-top:4px; display:inline-block;">⚠️ ${item.warning}</div>`
+                            : '';
+                        return `<li style="flex-wrap:wrap;"><span>💊 ${item.drug_name}</span> <span class="tag">销量 ${item.sales} 盒 · ${item.reason}</span>${rx}${warn}</li>`;
                     }).join('');
                     const comboHtml = d.combos.length
                         ? d.combos.map(item =>
-                            `<li><span>🔗 ${item.drug_name}</span> <span class="tag">共同购买 ${item.co_orders} 单 · 销量 ${item.sales} 盒</span></li>`
+                            `<li style="flex-wrap:wrap;"><span>🔗 ${item.drug_name}</span> <span class="tag">共同购买 ${item.co_orders} 单 · 销量 ${item.sales} 盒</span><div style="font-size:12px; color:#b45309; background:#fef3c7; border-radius:6px; padding:4px 10px; margin-top:4px; display:inline-block;">⚠️ ${item.warning}</div></li>`
                         ).join('')
                         : '<li style="justify-content:center;color:#999;">暂无搭配数据</li>';
                     box.innerHTML = `
@@ -1350,7 +1359,58 @@
         }
 
         // ============================================================
-        // 8. 特征重要性
+        // 8. 会员召回清单
+        // ============================================================
+        function loadRecallList() {
+            const box = document.getElementById('recallResult');
+            if (!box) return;
+            box.innerHTML = '<div style="text-align:center;color:#999;padding:20px;">⏳ 正在生成召回清单…</div>';
+
+            fetchAPI('api/member_recall.php')
+                .then(res => {
+                    if (res.code !== 200 || !res.data) {
+                        box.innerHTML = `<div style="text-align:center;color:#999;padding:20px;">${res.message || '暂无数据'}</div>`;
+                        return;
+                    }
+                    const d = res.data;
+                    const rows = d.list.map(item => {
+                        const days = Math.floor((Date.now() - new Date(item.last_buy_time).getTime()) / 86400000);
+                        return `<tr>
+                            <td style="padding:8px 10px; border-bottom:1px solid #e2e8f0; font-family:monospace;">${item.user_id}</td>
+                            <td style="padding:8px 10px; border-bottom:1px solid #e2e8f0; text-align:center;">R${item.r_score} F${item.f_score} M${item.m_score}</td>
+                            <td style="padding:8px 10px; border-bottom:1px solid #e2e8f0; text-align:center;">¥${Number(item.total_consume).toFixed(1)}（${item.total_order_cnt}单）</td>
+                            <td style="padding:8px 10px; border-bottom:1px solid #e2e8f0; text-align:center;">${item.last_buy_time.slice(0, 10)}</td>
+                            <td style="padding:8px 10px; border-bottom:1px solid #e2e8f0; text-align:center; color:${days > 180 ? '#b91c1c' : '#334155'};">${days} 天</td>
+                            <td style="padding:8px 10px; border-bottom:1px solid #e2e8f0;">💊 ${item.top_drug}（${item.top_drug_buy}盒）</td>
+                        </tr>`;
+                    }).join('');
+                    box.innerHTML = `
+                        <p style="color:#1a3c5e; font-weight:bold; margin:0 0 10px;">共 ${d.count} 位「${d.label}」客户，按最近购买时间升序（最久未买排最前）</p>
+                        <div style="overflow-x:auto;">
+                        <table style="width:100%; border-collapse:collapse; font-size:13px; background:#fff; border-radius:8px;">
+                            <thead>
+                                <tr style="background:#1a3c5e; color:#fff;">
+                                    <th style="padding:8px 10px; text-align:left;">客户ID</th>
+                                    <th style="padding:8px 10px;">RFM</th>
+                                    <th style="padding:8px 10px;">累计消费</th>
+                                    <th style="padding:8px 10px;">最近购买</th>
+                                    <th style="padding:8px 10px;">未购天数</th>
+                                    <th style="padding:8px 10px; text-align:left;">最常买药品</th>
+                                </tr>
+                            </thead>
+                            <tbody>${rows}</tbody>
+                        </table>
+                        </div>
+                        <p style="color:#94a3b8; font-size:12px; margin-top:10px;">💡 回访建议：优先联系未购天数超 180 天（红色）且累计消费高的客户；可结合其最常购买药品推荐专属优惠。</p>`;
+                })
+                .catch(err => {
+                    console.error('召回清单加载失败:', err);
+                    box.innerHTML = '<div style="text-align:center;color:#999;padding:20px;">加载失败，请重试</div>';
+                });
+        }
+
+        // ============================================================
+        // 9. 特征重要性
         // ============================================================
         function loadFeatureImportance(drugName) {
             const listEl = document.getElementById('importanceList');
@@ -1633,6 +1693,11 @@
             loadRecommendSelect();
             bindRecommendInputs();
             loadSymptomTags();
+
+            const recallBtn = document.getElementById('recallBtn');
+            if (recallBtn) {
+                recallBtn.addEventListener('click', loadRecallList);
+            }
 
             document.getElementById('recommendList').innerHTML =
                 '<li style="justify-content:center;color:#999;padding:30px 0;">💡 请选择或输入药品名，点击“推荐关联药品”查看结果</li>';

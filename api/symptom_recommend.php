@@ -8,7 +8,7 @@ header('Content-Type: application/json; charset=utf-8');
 $host = 'localhost';
 $dbname = 'pharm_order_db';
 $username = 'root';
-$password = '926472';
+$password = '123456';
 
 try {
     $pdo = new PDO("mysql:host=$host;dbname=$dbname;charset=utf8mb4", $username, $password);
@@ -40,6 +40,7 @@ if ($symptom === '') {
 $sqlMain = "SELECT
                 s.drug_name,
                 s.reason,
+                s.warning,
                 COALESCE((SELECT SUM(od.buy_num) FROM order_detail od
                           WHERE od.drug_name = s.drug_name), 0) AS sales,
                 COALESCE((SELECT MAX(od.is_prescription) FROM order_detail od
@@ -80,6 +81,7 @@ $combos = $stmtCombo->fetchAll(PDO::FETCH_ASSOC);
 // 为搭配药补上推荐理由
 foreach ($combos as &$c) {
     $c['reason'] = "常与{$symptom}主治药同单购买（共同出现 {$c['co_orders']} 单）";
+    $c['warning'] = '联合用药请与主治药间隔服用，具体咨询药师';
     $c['is_prescription'] = 0;
     $p = $pdo->prepare("SELECT MAX(is_prescription) FROM order_detail WHERE drug_name = ?");
     $p->execute([$c['drug_name']]);
